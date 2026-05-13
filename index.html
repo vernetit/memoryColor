@@ -1,0 +1,818 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Memory Color - Competición mental</title>
+
+  <meta name="description" content="Competición mental: memorizar colores">
+  <meta name="keywords" content="entrenamiento mental, velocidad mental, memorizar colores">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <link rel="shortcut icon" href="./favicon.ico">
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 16px;
+      background: #f5f5f5;
+      color: #111;
+    }
+
+    h3 {
+      margin-top: 0;
+    }
+
+    button,
+    input,
+    select {
+      font-size: 15px;
+      padding: 6px 10px;
+      margin: 3px;
+      cursor: pointer;
+    }
+
+    #screen {
+      margin-top: 16px;
+    }
+
+    .topbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .board {
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+
+    .board td {
+      padding: 2px;
+    }
+
+    .color-cell {
+      width: 30px;
+      height: 30px;
+      border: 1px solid #aaa;
+      box-sizing: border-box;
+    }
+
+    .memory-cell {
+      width: 30px;
+      height: 30px;
+      border: 1px solid #999;
+      box-sizing: border-box;
+      position: relative;
+    }
+
+    .memory-cell:hover::after {
+      content: attr(data-info);
+      position: absolute;
+      left: 36px;
+      top: 0;
+      background: white;
+      color: black;
+      border: 1px solid #aaa;
+      padding: 6px;
+      white-space: nowrap;
+      z-index: 50;
+      font-size: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+
+    .recall-cell {
+      width: 34px;
+      height: 34px;
+      background: white;
+      border: 2px solid #999;
+      box-sizing: border-box;
+    }
+
+    .recall-cell.selected {
+      outline: 4px solid #222;
+      outline-offset: 1px;
+    }
+
+    .palette {
+      margin-top: 14px;
+      max-width: 720px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      padding: 8px;
+      background: white;
+      border: 1px solid #ccc;
+    }
+
+    .palette-color {
+      width: 30px;
+      height: 30px;
+      border: 1px solid #777;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+
+    .palette-color:hover {
+      outline: 3px solid #222;
+    }
+
+    .config-box {
+      width: min(720px, 100%);
+      background: white;
+      border: 1px solid #ccc;
+      padding: 10px;
+    }
+
+    .config-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 4px;
+      margin-bottom: 8px;
+    }
+
+    .config-list {
+      overflow-y: auto;
+      max-height: 420px;
+      border: 1px solid #ddd;
+      padding: 4px;
+    }
+
+    .config-row {
+      display: grid;
+      grid-template-columns: 35px 35px 1fr;
+      align-items: center;
+      gap: 8px;
+      padding: 3px 0;
+      border-bottom: 1px solid #eee;
+    }
+
+    .mini-color {
+      width: 22px;
+      height: 22px;
+      border: 1px solid #777;
+    }
+
+    .result-grid {
+      border-collapse: collapse;
+    }
+
+    .result-grid td {
+      padding: 2px;
+    }
+
+    .compare-cell {
+      width: 34px;
+      height: 30px;
+      display: flex;
+      border: 2px solid green;
+      box-sizing: border-box;
+    }
+
+    .compare-cell.wrong {
+      border-color: red;
+    }
+
+    .half {
+      width: 50%;
+      height: 100%;
+    }
+
+    .result-box {
+      margin-top: 14px;
+      display: inline-block;
+      background: #3fad46;
+      color: white;
+      padding: 10px;
+      font-weight: bold;
+    }
+
+    .error {
+      background: #ffe1e1;
+      color: #800;
+      border: 1px solid #c00;
+      padding: 10px;
+      margin-top: 12px;
+      max-width: 720px;
+    }
+
+    .small {
+      font-size: 13px;
+      color: #555;
+    }
+  </style>
+</head>
+
+<body>
+  <h3>Color Memory!</h3>
+
+  <div class="topbar">
+    <select id="level" style="width: 80px;">
+      <option value="1" selected>5x5</option>
+      <option value="2">10x10</option>
+    </select>
+
+    <input type="button" value="Start" id="jugar">
+    <input type="button" value="Add or remove Colors" id="config">
+    <input type="button" value="Help" id="help">
+  </div>
+
+  <div class="small">
+    Carga colores desde <code>./colores.csv</code>
+  </div>
+
+  <div id="screen">Cargando colores...</div>
+
+<script>
+"use strict";
+
+window.helpText =
+  "Memory Colors\n" +
+  "Config to activate/desactivate colors\n" +
+  "CSV esperado: nombre,,nombreCSS,#HEX,R,G,B\n" +
+  "Ejemplo: lightpink,,lightpink,#FFB6C1,255,182,193";
+
+let colores = [];
+let selectedItems = [];
+let selectedItemsRnd = [];
+let lista = [];
+let recall = [];
+
+let vistaConfig = 0;
+let tamano = 5;
+let t_ini = 0;
+let t_fin = 0;
+let t_dif = 0;
+let correctas = 0;
+let selectedRecallIndex = 0;
+
+const STORAGE_KEY = "initMC";
+
+document.addEventListener("DOMContentLoaded", async function () {
+  document.getElementById("config").addEventListener("click", mostrarConfig);
+  document.getElementById("jugar").addEventListener("click", jugar);
+  document.getElementById("help").addEventListener("click", function () {
+    alert(window.helpText);
+  });
+
+  try {
+    await cargarColoresDesdeCSV("./colores.csv");
+    iniciarPrograma();
+    document.getElementById("screen").innerHTML =
+      "Colores cargados: " + colores.length + ".";
+  } catch (err) {
+    console.error(err);
+    document.getElementById("screen").innerHTML =
+      '<div class="error">' +
+      '<b>No pude cargar colores.csv.</b><br><br>' +
+      'Asegurate de que el archivo <code>colores.csv</code> esté en la misma carpeta que <code>index.html</code>.<br><br>' +
+      'También recordá que <code>fetch()</code> suele fallar si abrís el HTML como archivo local <code>file://</code>. ' +
+      'Probalo con GitHub Pages o con:<br><br>' +
+      '<code>python3 -m http.server 8000</code>' +
+      '</div>';
+  }
+});
+
+async function cargarColoresDesdeCSV(url) {
+  const response = await fetch(url, { cache: "no-store" });
+
+  if (!response.ok) {
+    throw new Error("No se pudo cargar " + url + ". HTTP " + response.status);
+  }
+
+  const texto = await response.text();
+  colores = parsearCSVColores(texto);
+
+  if (!colores.length) {
+    throw new Error("El CSV no tiene colores válidos.");
+  }
+}
+
+function parsearCSVColores(texto) {
+  const lineas = texto
+    .split(/\r?\n/)
+    .map(linea => linea.trim())
+    .filter(linea => linea && !linea.startsWith("#"));
+
+  const salida = [];
+
+  for (const linea of lineas) {
+    const partes = parseCSVLine(linea).map(x => x.trim());
+
+    /*
+      Formato esperado:
+      lightpink,,lightpink,#FFB6C1,255,182,193
+
+      Índices:
+      0 nombre
+      1 vacío
+      2 nombre css
+      3 hex
+      4 r
+      5 g
+      6 b
+
+      También tolera el formato viejo después de quitar ",,":
+      lightpink,lightpink,#FFB6C1,255,182,193
+    */
+
+    let nombre = partes[0] || "";
+    let hex = "";
+    let r = "";
+    let g = "";
+    let b = "";
+
+    if (partes[3] && partes[3].startsWith("#")) {
+      hex = partes[3];
+      r = partes[4];
+      g = partes[5];
+      b = partes[6];
+    } else if (partes[2] && partes[2].startsWith("#")) {
+      hex = partes[2];
+      r = partes[3];
+      g = partes[4];
+      b = partes[5];
+    } else {
+      const posHex = partes.findIndex(x => x.startsWith("#"));
+      if (posHex >= 0) {
+        hex = partes[posHex];
+        r = partes[posHex + 1];
+        g = partes[posHex + 2];
+        b = partes[posHex + 3];
+      }
+    }
+
+    if (!nombre || !hex) continue;
+
+    const rgb = limpiarRGB(r, g, b);
+
+    /*
+      Estructura compatible con el código viejo:
+      colores[i][0] = nombre
+      colores[i][1] = hex
+      colores[i][2] = rgb
+      colores[i][3] = default activo
+      colores[i][5] = activo actual
+    */
+
+    salida.push([
+      nombre,
+      hex,
+      rgb,
+      1,
+      null,
+      1
+    ]);
+  }
+
+  return salida;
+}
+
+function parseCSVLine(linea) {
+  const out = [];
+  let actual = "";
+  let dentroComillas = false;
+
+  for (let i = 0; i < linea.length; i++) {
+    const c = linea[i];
+
+    if (c === '"') {
+      if (dentroComillas && linea[i + 1] === '"') {
+        actual += '"';
+        i++;
+      } else {
+        dentroComillas = !dentroComillas;
+      }
+    } else if (c === "," && !dentroComillas) {
+      out.push(actual);
+      actual = "";
+    } else {
+      actual += c;
+    }
+  }
+
+  out.push(actual);
+  return out;
+}
+
+function limpiarRGB(r, g, b) {
+  r = parseInt(r, 10);
+  g = parseInt(g, 10);
+  b = parseInt(b, 10);
+
+  if (
+    Number.isFinite(r) &&
+    Number.isFinite(g) &&
+    Number.isFinite(b)
+  ) {
+    return r + "," + g + "," + b;
+  }
+
+  return "";
+}
+
+function iniciarPrograma() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+
+  if (!saved) {
+    let save = "";
+
+    for (let i = 0; i < colores.length; i++) {
+      save += colores[i][3] + ",";
+      colores[i][5] = colores[i][3];
+    }
+
+    save = save.slice(0, -1);
+    localStorage.setItem(STORAGE_KEY, save);
+  } else {
+    const aVal = saved.split(",");
+
+    for (let i = 0; i < colores.length; i++) {
+      colores[i][5] = parseInt(aVal[i] || colores[i][3], 10);
+    }
+  }
+}
+
+function mostrarConfig() {
+  const screen = document.getElementById("screen");
+
+  if (vistaConfig) {
+    screen.innerHTML = "";
+    vistaConfig = 0;
+    return;
+  }
+
+  vistaConfig = 1;
+
+  let html = "";
+
+  html += '<div class="config-box">';
+  html += configButtonsHTML();
+  html += '<div class="config-list">';
+
+  for (let i = 0; i < colores.length; i++) {
+    const checked = colores[i][5] === 1 ? "checked" : "";
+    const backgroundColor = colores[i][1];
+    const nombre = escapeHTML(colores[i][0]);
+
+    html +=
+      '<div class="config-row">' +
+        '<input type="checkbox" id="ch' + i + '" ' + checked + '>' +
+        '<div class="mini-color" style="background-color:' + backgroundColor + '"></div>' +
+        '<div>' + nombre + ' <span class="small">' + backgroundColor + '</span></div>' +
+      '</div>';
+  }
+
+  html += '</div>';
+  html += configButtonsHTML();
+  html += '</div>';
+
+  screen.innerHTML = html;
+
+  document.querySelectorAll(".cancel").forEach(btn => btn.addEventListener("click", cancel));
+  document.querySelectorAll(".save").forEach(btn => btn.addEventListener("click", save1));
+  document.querySelectorAll(".setDefault").forEach(btn => btn.addEventListener("click", setDefault));
+  document.querySelectorAll(".all").forEach(btn => btn.addEventListener("click", all));
+  document.querySelectorAll(".inverse").forEach(btn => btn.addEventListener("click", inverse));
+  document.querySelectorAll(".reload").forEach(btn => btn.addEventListener("click", reload));
+  document.querySelectorAll(".none").forEach(btn => btn.addEventListener("click", none));
+}
+
+function configButtonsHTML() {
+  return (
+    '<div class="config-buttons">' +
+      '<input type="button" value="Inverse" class="inverse">' +
+      '<input type="button" value="None" class="none">' +
+      '<input type="button" value="All" class="all">' +
+      '<input type="button" value="Default" class="setDefault">' +
+      '<input type="button" value="Reload" class="reload">' +
+      '<input type="button" value="Save" class="save">' +
+      '<input type="button" value="Cancel" class="cancel">' +
+    '</div>'
+  );
+}
+
+function reload() {
+  const saved = localStorage.getItem(STORAGE_KEY);
+  if (!saved) return;
+
+  const aVal = saved.split(",");
+
+  for (let i = 0; i < colores.length; i++) {
+    const ch = document.getElementById("ch" + i);
+    if (!ch) continue;
+    ch.checked = !!parseInt(aVal[i] || "0", 10);
+  }
+}
+
+function inverse() {
+  for (let i = 0; i < colores.length; i++) {
+    const ch = document.getElementById("ch" + i);
+    if (ch) ch.checked = !ch.checked;
+  }
+}
+
+function all() {
+  for (let i = 0; i < colores.length; i++) {
+    const ch = document.getElementById("ch" + i);
+    if (ch) ch.checked = true;
+  }
+}
+
+function none() {
+  for (let i = 0; i < colores.length; i++) {
+    const ch = document.getElementById("ch" + i);
+    if (ch) ch.checked = false;
+  }
+}
+
+function setDefault() {
+  for (let i = 0; i < colores.length; i++) {
+    const ch = document.getElementById("ch" + i);
+    if (ch) ch.checked = !!colores[i][3];
+  }
+}
+
+function save1() {
+  let save = "";
+
+  for (let i = 0; i < colores.length; i++) {
+    const ch = document.getElementById("ch" + i);
+
+    if (ch && ch.checked) {
+      save += "1,";
+      colores[i][5] = 1;
+    } else {
+      save += "0,";
+      colores[i][5] = 0;
+    }
+  }
+
+  save = save.slice(0, -1);
+  localStorage.setItem(STORAGE_KEY, save);
+
+  alert("Configuración guardada.");
+}
+
+function cancel() {
+  document.getElementById("screen").innerHTML = "";
+  vistaConfig = 0;
+}
+
+function jugar() {
+  vistaConfig = 0;
+  selectedItems = [];
+  recall = [];
+  lista = [];
+
+  for (let i = 0; i < colores.length; i++) {
+    if (colores[i][5] === 1) {
+      lista.push(i);
+    }
+  }
+
+  if (!lista.length) {
+    alert("No hay colores activos. Activá al menos uno en configuración.");
+    return;
+  }
+
+  tamano = parseInt(document.getElementById("level").value, 10) === 1 ? 5 : 10;
+
+  let html = '<table class="board">';
+
+  let z = 0;
+
+  for (let i = 0; i < tamano; i++) {
+    html += "<tr>";
+
+    for (let j = 0; j < tamano; j++) {
+      const rnd = randomInt(0, lista.length - 1);
+      const id = lista[rnd];
+      selectedItems[z] = id;
+
+      const nombre = escapeHTML(colores[id][0]);
+      const hex = colores[id][1];
+      const rgb = colores[id][2];
+
+      html +=
+        '<td>' +
+          '<div class="memory-cell" ' +
+          'style="background-color:' + hex + '" ' +
+          'data-info="' + nombre + ' | ' + hex + ' | rgb(' + rgb + ')">' +
+          '</div>' +
+        '</td>';
+
+      z++;
+    }
+
+    html += "</tr>";
+  }
+
+  html += "</table>";
+  html += '<br><input type="button" value="Recall" id="recallBtn">';
+
+  document.getElementById("screen").innerHTML = html;
+  document.getElementById("recallBtn").addEventListener("click", recall1);
+
+  t_ini = Date.now();
+}
+
+function recall1() {
+  t_fin = Date.now();
+
+  selectedItemsRnd = selectedItems.slice().sort(() => Math.random() - 0.5);
+  recall = new Array(tamano * tamano).fill("#FFFFFF");
+  selectedRecallIndex = 0;
+
+  let html = "";
+
+  html += "<p><b>Recall:</b> tocá una celda blanca y después elegí el color abajo.</p>";
+
+  html += '<table class="board">';
+
+  let z = 0;
+
+  for (let i = 0; i < tamano; i++) {
+    html += "<tr>";
+
+    for (let j = 0; j < tamano; j++) {
+      const selectedClass = z === 0 ? " selected" : "";
+
+      html +=
+        '<td>' +
+          '<div class="recall-cell' + selectedClass + '" ' +
+          'id="respuesta' + z + '" ' +
+          'data-index="' + z + '">' +
+          '</div>' +
+        '</td>';
+
+      z++;
+    }
+
+    html += "</tr>";
+  }
+
+  html += "</table>";
+
+  html += '<div class="palette">';
+
+  for (let i = 0; i < selectedItemsRnd.length; i++) {
+    const idRnd = selectedItemsRnd[i];
+    const nombre = escapeHTML(colores[idRnd][0]);
+    const hex = colores[idRnd][1];
+
+    html +=
+      '<div class="palette-color" ' +
+      'style="background-color:' + hex + '" ' +
+      'title="' + nombre + '" ' +
+      'data-color="' + hex + '">' +
+      '</div>';
+  }
+
+  html += "</div>";
+
+  html += '<br><input type="button" value="Answer" id="answerBtn">';
+
+  document.getElementById("screen").innerHTML = html;
+
+  document.querySelectorAll(".recall-cell").forEach(cell => {
+    cell.addEventListener("click", function () {
+      selectedRecallIndex = parseInt(this.dataset.index, 10);
+      marcarCeldaSeleccionada();
+    });
+  });
+
+  document.querySelectorAll(".palette-color").forEach(color => {
+    color.addEventListener("click", function () {
+      contestar(selectedRecallIndex, this.dataset.color);
+
+      if (selectedRecallIndex < recall.length - 1) {
+        selectedRecallIndex++;
+        marcarCeldaSeleccionada();
+      }
+    });
+  });
+
+  document.getElementById("answerBtn").addEventListener("click", answer);
+}
+
+function marcarCeldaSeleccionada() {
+  document.querySelectorAll(".recall-cell").forEach(cell => {
+    cell.classList.remove("selected");
+  });
+
+  const celda = document.getElementById("respuesta" + selectedRecallIndex);
+  if (celda) celda.classList.add("selected");
+}
+
+function answer() {
+  let z = 0;
+  correctas = 0;
+
+  let html = '<table class="result-grid">';
+
+  for (let i = 0; i < tamano; i++) {
+    html += "<tr>";
+
+    for (let j = 0; j < tamano; j++) {
+      const idSelectedItem = selectedItems[z];
+      const original = colores[idSelectedItem][1];
+      const respuesta = recall[z];
+
+      const ok = normalizarColor(original) === normalizarColor(respuesta);
+
+      if (ok) correctas++;
+
+      html +=
+        '<td>' +
+          '<div class="compare-cell ' + (ok ? "" : "wrong") + '">' +
+            '<div class="half" style="background-color:' + original + '"></div>' +
+            '<div class="half" style="background-color:' + respuesta + '"></div>' +
+          '</div>' +
+        '</td>';
+
+      z++;
+    }
+
+    html += "</tr>";
+  }
+
+  html += "</table>";
+
+  const tt = tamano * tamano;
+  const porcent = correctas * 100 / tt;
+  t_dif = t_fin - t_ini;
+
+  const myDate = new Date();
+  const ponerFecha =
+    (myDate.getMonth() + 1) + "/" +
+    myDate.getDate() + "/" +
+    myDate.getFullYear();
+
+  const total_colors = lista.length;
+
+  html +=
+    '<br><br><div class="result-box">' +
+    "You got " + correctas + " out of " + tt + " attempted! " +
+    "(" + porcent.toFixed(2) + "% accuracy) " +
+    "in " + getDuration(t_dif) + ", " +
+    "total colors: " + total_colors + ", " +
+    ponerFecha +
+    "</div>";
+
+  html += '<br><br><input type="button" value="Play again" onclick="jugar()">';
+
+  document.getElementById("screen").innerHTML = html;
+}
+
+function contestar(x, y) {
+  const celda = document.getElementById("respuesta" + x);
+  if (!celda) return;
+
+  celda.style.backgroundColor = y;
+  recall[x] = y;
+}
+
+function getDuration(millis) {
+  let seconds = Math.floor(millis / 1000);
+  const days = Math.floor(seconds / 86400);
+  seconds %= 86400;
+
+  const hours = Math.floor(seconds / 3600);
+  seconds %= 3600;
+
+  const minutes = Math.floor(seconds / 60);
+  seconds %= 60;
+
+  const parts = [];
+
+  if (days) parts.push(days + " " + (days === 1 ? "day" : "days"));
+  if (hours) parts.push(hours + " " + (hours === 1 ? "hour" : "hours"));
+  if (minutes) parts.push(minutes + " " + (minutes === 1 ? "minute" : "minutes"));
+  if (seconds || !parts.length) parts.push(seconds + " " + (seconds === 1 ? "second" : "seconds"));
+
+  return parts.join(", ");
+}
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function escapeHTML(str) {
+  return String(str)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function normalizarColor(c) {
+  return String(c || "").trim().toLowerCase();
+}
+</script>
+
+</body>
+</html>
